@@ -223,4 +223,5 @@ class SendFriendObserverTest extends AbstractController
         $this->getRequest()->setPostValue($post);
     }
 
+
 }
