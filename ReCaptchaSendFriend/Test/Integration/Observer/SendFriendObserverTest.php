@@ -162,6 +162,29 @@ class SendFriendObserverTest extends AbstractController
     }
 
     /**
+     * @magentoDbIsolation enabled
+     * @magentoAppIsolation enabled
+     * @magentoConfigFixture default_store sendfriend/email/enabled 1
+     * @magentoConfigFixture default_store sendfriend/email/allow_guest 1
+     * @magentoDataFixture Magento/Catalog/_files/products.php
+     * @throws LocalizedException
+     */
+    public function testErrorValidatingRecaptcha()
+    {
+        $exception = new LocalizedException(__('error_message'));
+
+        $this->captchaValidatorMock
+            ->expects($this->once())->method('validate')->willThrowException($exception);
+
+        $this->expectException(LocalizedException::class);
+        $this->expectExceptionMessage($exception->getMessage());
+
+        $product = $this->getProduct();
+        $this->prepareRequestData(true, true);
+        $this->dispatch('sendfriend/product/sendmail/id/' . $product->getId());
+    }
+
+    /**
      * @return ProductInterface
      */
     private function getProduct()
@@ -222,6 +245,5 @@ class SendFriendObserverTest extends AbstractController
         $this->getRequest()->setMethod(Request::METHOD_POST);
         $this->getRequest()->setPostValue($post);
     }
-
 
 }
