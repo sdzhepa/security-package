@@ -88,10 +88,6 @@ class LoginObserver implements ObserverInterface
         if ($this->captchaConfig->isCaptchaEnabledFor('user_login')
             && $this->request->getFullActionName() === $this->loginActionName
         ) {
-
-
-            echo 'prfllrfppfelf';
-
             $reCaptchaResponse = $this->request->getParam(
                 CaptchaValidatorInterface::PARAM_RECAPTCHA_RESPONSE
             );
