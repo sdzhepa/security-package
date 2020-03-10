@@ -9,17 +9,14 @@ namespace Magento\ReCaptchaReview\Test\Integration;
 
 use Magento\Catalog\Api\Data\ProductInterface;
 use Magento\Catalog\Api\ProductRepositoryInterface;
-use Magento\Framework\App\ResponseInterface;
 use Magento\Framework\Data\Form\FormKey;
 use Magento\Framework\Exception\InputException;
 use Magento\Framework\Exception\LocalizedException;
-use Magento\Framework\Message\ManagerInterface;
 use Magento\Framework\Message\MessageInterface;
-use Magento\Framework\Url\EncoderInterface;
 use Magento\Framework\UrlInterface;
-use Magento\ReCaptcha\Model\CaptchaValidator;
-use Magento\ReCaptchaApi\Api\CaptchaValidatorInterface;
+use Magento\Framework\Validation\ValidationResult;
 use Magento\ReCaptchaUi\Model\CaptchaResponseResolverInterface;
+use Magento\ReCaptchaValidation\Model\Validator;
 use Magento\Review\Model\Review;
 use Magento\Store\Model\ScopeInterface;
 use Magento\TestFramework\App\MutableScopeConfig;
@@ -48,16 +45,6 @@ class ReviewFormTest extends AbstractController
     private $formKey;
 
     /**
-     * @var ManagerInterface
-     */
-    private $messageManager;
-
-    /**
-     * @var EncoderInterface
-     */
-    private $urlEncoder;
-
-    /**
      * @var UrlInterface
      */
     private $url;
@@ -73,14 +60,9 @@ class ReviewFormTest extends AbstractController
     private $productRepository;
 
     /**
-     * @var ResponseInterface
+     * @var ValidationResult|MockObject
      */
-    private $response;
-
-    /**
-     * @var CaptchaValidatorInterface|MockObject
-     */
-    private $captchaValidatorMock;
+    private $captchaValidationResultMock;
 
     /**
      * @inheritDoc
@@ -90,14 +72,15 @@ class ReviewFormTest extends AbstractController
         parent::setUp();
         $this->mutableScopeConfig = $this->_objectManager->get(MutableScopeConfig::class);
         $this->formKey = $this->_objectManager->get(FormKey::class);
-        $this->response = $this->_objectManager->get(ResponseInterface::class);
         $this->review = $this->_objectManager->get(Review::class);
         $this->productRepository = $this->_objectManager->get(ProductRepositoryInterface::class);
-        $this->messageManager = $this->_objectManager->get(ManagerInterface::class);
-        $this->urlEncoder = $this->_objectManager->get(EncoderInterface::class);
         $this->url = $this->_objectManager->get(UrlInterface::class);
-        $this->captchaValidatorMock = $this->createMock(CaptchaValidatorInterface::class);
-        $this->_objectManager->addSharedInstance($this->captchaValidatorMock, CaptchaValidator::class);
+        $this->captchaValidationResultMock = $this->createMock(ValidationResult::class);
+        $captchaValidatorMock = $this->createMock(Validator::class);
+        $captchaValidatorMock->expects($this->any())
+            ->method('isValid')
+            ->willReturn($this->captchaValidationResultMock);
+        $this->_objectManager->addSharedInstance($captchaValidatorMock, Validator::class);
     }
 
     public function testGetRequestIfReCaptchaIsDisabled()
@@ -107,6 +90,9 @@ class ReviewFormTest extends AbstractController
         $this->checkSuccessfulGetResponse();
     }
 
+    /**
+     * @magentoConfigFixture default_store recaptcha_frontend/type_for/product_review invisible
+     */
     public function testGetRequestIfReCaptchaKeysAreNotConfigured()
     {
         $this->initConfig(1, null, null);
@@ -114,6 +100,9 @@ class ReviewFormTest extends AbstractController
         $this->checkSuccessfulGetResponse();
     }
 
+    /**
+     * @magentoConfigFixture default_store recaptcha_frontend/type_for/product_review invisible
+     */
     public function testGetRequestIfReCaptchaIsEnabled()
     {
         $this->initConfig(1, 'test_public_key', 'test_private_key');
@@ -138,7 +127,7 @@ class ReviewFormTest extends AbstractController
     public function testPostRequestWithSuccessfulReCaptchaValidation()
     {
         $this->initConfig(1, 'test_public_key', 'test_private_key');
-        $this->captchaValidatorMock->expects($this->once())->method('isValid')->willReturn(true);
+        $this->captchaValidationResultMock->expects($this->once())->method('isValid')->willReturn(true);
 
         $this->checkSuccessfulPostResponse(
             true,
@@ -149,7 +138,7 @@ class ReviewFormTest extends AbstractController
     public function testPostRequestWithFailedReCaptchaValidation()
     {
         $this->initConfig(1, 'test_public_key', 'test_private_key');
-        $this->captchaValidatorMock->expects($this->once())->method('isValid')->willReturn(false);
+        $this->captchaValidationResultMock->expects($this->once())->method('isValid')->willReturn(false);
 
         $this->checkSuccessfulPostResponse(
             false,
@@ -160,7 +149,7 @@ class ReviewFormTest extends AbstractController
     public function testPostRequestIfReCaptchaParameterIsMissed()
     {
         $this->initConfig(1, 'test_public_key', 'test_private_key');
-        $this->captchaValidatorMock->expects($this->never())->method('isValid');
+        $this->captchaValidationResultMock->expects($this->never())->method('isValid');
         $this->expectException(InputException::class);
         $this->expectExceptionMessage('Can not resolve reCAPTCHA parameter.');
 
@@ -215,7 +204,7 @@ class ReviewFormTest extends AbstractController
                 $reviewsCount
             );
             $this->assertSessionMessages(
-                self::equalTo(['You cannot proceed with such operation, your reCAPTCHA reputation is too low.']),
+                self::equalTo(['reCAPTCHA verification failed']),
                 MessageInterface::TYPE_ERROR
             );
         }
@@ -254,10 +243,9 @@ class ReviewFormTest extends AbstractController
      */
     private function initConfig(?int $enabled, ?string $public, ?string $private): void
     {
-        $this->mutableScopeConfig->setValue('recaptcha/frontend/type', 'invisible', ScopeInterface::SCOPE_WEBSITE);
-        $this->mutableScopeConfig->setValue('recaptcha/frontend/enabled_for_newsletter', 0, ScopeInterface::SCOPE_WEBSITE);
-        $this->mutableScopeConfig->setValue('recaptcha/frontend/enabled_for_product_review', $enabled, ScopeInterface::SCOPE_WEBSITE);
-        $this->mutableScopeConfig->setValue('recaptcha/frontend/public_key', $public, ScopeInterface::SCOPE_WEBSITE);
-        $this->mutableScopeConfig->setValue('recaptcha/frontend/private_key', $private, ScopeInterface::SCOPE_WEBSITE);
+        $this->mutableScopeConfig->setValue('recaptcha_frontend/type_for/newsletter', null, ScopeInterface::SCOPE_WEBSITE);
+        $this->mutableScopeConfig->setValue('recaptcha_frontend/type_for/product_review', $enabled ? 'invisible' : null, ScopeInterface::SCOPE_WEBSITE);
+        $this->mutableScopeConfig->setValue('recaptcha_frontend/type_invisible/public_key', $public, ScopeInterface::SCOPE_WEBSITE);
+        $this->mutableScopeConfig->setValue('recaptcha_frontend/type_invisible/private_key', $private, ScopeInterface::SCOPE_WEBSITE);
     }
 }
