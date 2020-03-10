@@ -14,9 +14,9 @@ use Magento\Framework\Exception\InputException;
 use Magento\Framework\Exception\LocalizedException;
 use Magento\Framework\Message\MessageInterface;
 use Magento\Framework\UrlInterface;
-use Magento\ReCaptcha\Model\CaptchaValidator;
-use Magento\ReCaptchaApi\Api\CaptchaValidatorInterface;
+use Magento\Framework\Validation\ValidationResult;
 use Magento\ReCaptchaUi\Model\CaptchaResponseResolverInterface;
+use Magento\ReCaptchaValidation\Model\Validator;
 use Magento\Store\Model\ScopeInterface;
 use Magento\TestFramework\App\MutableScopeConfig;
 use Magento\TestFramework\Mail\Template\TransportBuilderMock;
@@ -59,9 +59,9 @@ class SendFriendFormTest extends AbstractController
     private $transportMock;
 
     /**
-     * @var CaptchaValidatorInterface|MockObject
+     * @var ValidationResult|MockObject
      */
-    private $captchaValidatorMock;
+    private $captchaValidationResultMock;
 
     /**
      * @inheritDoc
@@ -74,8 +74,12 @@ class SendFriendFormTest extends AbstractController
         $this->productRepository = $this->_objectManager->get(ProductRepositoryInterface::class);
         $this->url = $this->_objectManager->get(UrlInterface::class);
         $this->transportMock = $this->_objectManager->get(TransportBuilderMock::class);
-        $this->captchaValidatorMock = $this->createMock(CaptchaValidatorInterface::class);
-        $this->_objectManager->addSharedInstance($this->captchaValidatorMock, CaptchaValidator::class);
+        $this->captchaValidationResultMock = $this->createMock(ValidationResult::class);
+        $captchaValidationResultMock = $this->createMock(Validator::class);
+        $captchaValidationResultMock->expects($this->any())
+            ->method('isValid')
+            ->willReturn($this->captchaValidationResultMock);
+        $this->_objectManager->addSharedInstance($captchaValidationResultMock, Validator::class);
     }
 
     /**
@@ -92,6 +96,7 @@ class SendFriendFormTest extends AbstractController
     /**
      * @magentoConfigFixture default_store sendfriend/email/enabled 1
      * @magentoConfigFixture default_store sendfriend/email/allow_guest 1
+     * @magentoConfigFixture default_store recaptcha_frontend/type_for/sendfriend invisible
      */
     public function testGetRequestIfReCaptchaKeysAreNotConfigured()
     {
@@ -103,6 +108,7 @@ class SendFriendFormTest extends AbstractController
     /**
      * @magentoConfigFixture default_store sendfriend/email/enabled 1
      * @magentoConfigFixture default_store sendfriend/email/allow_guest 1
+     * @magentoConfigFixture default_store recaptcha_frontend/type_for/sendfriend invisible
      */
     public function testGetRequestIfReCaptchaIsEnabled()
     {
@@ -140,7 +146,7 @@ class SendFriendFormTest extends AbstractController
     public function testPostRequestWithSuccessfulReCaptchaValidation()
     {
         $this->initConfig(1, 'test_public_key', 'test_private_key');
-        $this->captchaValidatorMock->expects($this->once())->method('isValid')->willReturn(true);
+        $this->captchaValidationResultMock->expects($this->once())->method('isValid')->willReturn(true);
 
         $this->checkSuccessfulPostResponse(
             true,
@@ -155,7 +161,7 @@ class SendFriendFormTest extends AbstractController
     public function testPostRequestWithFailedReCaptchaValidation()
     {
         $this->initConfig(1, 'test_public_key', 'test_private_key');
-        $this->captchaValidatorMock->expects($this->once())->method('isValid')->willReturn(false);
+        $this->captchaValidationResultMock->expects($this->once())->method('isValid')->willReturn(false);
 
         $this->checkSuccessfulPostResponse(
             false,
@@ -170,7 +176,7 @@ class SendFriendFormTest extends AbstractController
     public function testPostRequestIfReCaptchaParameterIsMissed()
     {
         $this->initConfig(1, 'test_public_key', 'test_private_key');
-        $this->captchaValidatorMock->expects($this->never())->method('isValid');
+        $this->captchaValidationResultMock->expects($this->never())->method('isValid');
         $this->expectException(InputException::class);
         $this->expectExceptionMessage('Can not resolve reCAPTCHA parameter.');
 
@@ -244,7 +250,7 @@ class SendFriendFormTest extends AbstractController
         } else {
             $this->assertRedirect(self::equalTo($this->url->getRouteUrl()));
             $this->assertSessionMessages(
-                self::equalTo(['You cannot proceed with such operation, your reCAPTCHA reputation is too low.']),
+                self::equalTo(['reCAPTCHA verification failed']),
                 MessageInterface::TYPE_ERROR
             );
             self::assertEmpty($this->transportMock->getSentMessage());
@@ -267,10 +273,9 @@ class SendFriendFormTest extends AbstractController
      */
     private function initConfig(?int $enabled, ?string $public, ?string $private): void
     {
-        $this->mutableScopeConfig->setValue('recaptcha/frontend/type', 'invisible', ScopeInterface::SCOPE_WEBSITE);
-        $this->mutableScopeConfig->setValue('recaptcha/frontend/enabled_for_newsletter', 0, ScopeInterface::SCOPE_WEBSITE);
-        $this->mutableScopeConfig->setValue('recaptcha/frontend/enabled_for_sendfriend', $enabled, ScopeInterface::SCOPE_WEBSITE);
-        $this->mutableScopeConfig->setValue('recaptcha/frontend/public_key', $public, ScopeInterface::SCOPE_WEBSITE);
-        $this->mutableScopeConfig->setValue('recaptcha/frontend/private_key', $private, ScopeInterface::SCOPE_WEBSITE);
+        $this->mutableScopeConfig->setValue('recaptcha_frontend/type_for/newsletter', null, ScopeInterface::SCOPE_WEBSITE);
+        $this->mutableScopeConfig->setValue('recaptcha_frontend/type_for/sendfriend', $enabled ? 'invisible' : null, ScopeInterface::SCOPE_WEBSITE);
+        $this->mutableScopeConfig->setValue('recaptcha_frontend/type_invisible/public_key', $public, ScopeInterface::SCOPE_WEBSITE);
+        $this->mutableScopeConfig->setValue('recaptcha_frontend/type_invisible/private_key', $private, ScopeInterface::SCOPE_WEBSITE);
     }
 }
