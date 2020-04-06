@@ -53,7 +53,9 @@ class ValidationConfigProvider implements ValidationConfigProviderInterface
     }
 
     /**
-     * @inheritdoc
+     * Return frontend Validation config for reCAPTCHA v2.
+     *
+     * @return ValidationConfigInterface
      */
     public function get(): ValidationConfigInterface
     {

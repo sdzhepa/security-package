@@ -36,7 +36,9 @@ class UiConfigProvider implements UiConfigProviderInterface
     }
 
     /**
-     * @inheritdoc
+     * Return frontend UI config for Invisible reCAPTCHA.
+     *
+     * @return array
      */
     public function get(): array
     {

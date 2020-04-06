@@ -36,7 +36,9 @@ class UiConfigProvider implements UiConfigProviderInterface
     }
 
     /**
-     * @inheritdoc
+     * Return frontend UI config for reCAPTCHA v3.
+     *
+     * @return array
      */
     public function get(): array
     {

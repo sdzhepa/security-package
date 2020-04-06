@@ -52,7 +52,9 @@ class ValidationConfigProvider implements ValidationConfigProviderInterface
     }
 
     /**
-     * @inheritdoc
+     * Return adminhtml Validation config for reCAPTCHA v2.
+     *
+     * @return ValidationConfigInterface
      */
     public function get(): ValidationConfigInterface
     {
